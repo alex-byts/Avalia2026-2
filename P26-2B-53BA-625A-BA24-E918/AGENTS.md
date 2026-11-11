@@ -2,35 +2,37 @@
 
 ## Harness
 
-- **Harness principal:** Copilot SDK integrado ao VS Code.
-- **Coordenação:** o agente principal definiu os contratos, integrou o esquema e a documentação; agentes delegados trabalharam em áreas de arquivos separadas e a integração final é verificada localmente.
-- **Modelos:** não identificados pelo harness nesta execução; não são declarados para evitar atribuição incorreta.
+- **Agente 1 e Agente 3:** GitHub Copilot (Chat/Agent) no VS Code. Os modelos não foram informados pelo harness e por isso não são declarados.
+- **Agente 2:** Claude, em sessão do aplicativo Claude (ambiente de agente em nuvem). Modelo configurado na sessão: `claude-sonnet-5-5`; o modelo que respondeu cada turno pode diferir do configurado.
+- O estudante coordenou os três, decidiu o que aceitar, executou os comandos na própria máquina e fez os testes manuais.
 
 ## Agentes e entregas
 
-### Agente 1 — Backend Cloudflare, D1 e OAuth2
+### Agente 1 — Construção (Copilot, VS Code)
 
-- Implementa Pages Functions, validação de entrada, autorização de autoria e sessão assinada.
-- Usa `skills/serverless-d1-discord/SKILL.md`.
-- Entrega: `functions/api/` e `functions/_lib/`.
+- Gerou o backend (Pages Functions, validação, autorização de autoria, sessão assinada, esquema D1) e a interface Vanilla JS.
+- Skills: `skills/serverless-d1-discord/SKILL.md` e `skills/vanilla-dom-ui/SKILL.md`.
+- Entrega: `functions/`, `migrations/`, `public/`.
 
-### Agente 2 — Interface Vanilla JS
+### Agente 2 — Revisão de código e apoio ao deploy (Claude)
 
-- Implementa a interface responsiva, acessível, sem framework, integrada aos endpoints do mural.
-- Usa `skills/vanilla-dom-ui/SKILL.md`.
-- Entrega: `public/index.html`, `public/styles.css` e `public/app.js`.
+- Leu o código entregue pelo Agente 1 e conferiu: validação de `state` e escopo `identify` no OAuth, cookie HttpOnly/Secure/SameSite, identidade do autor vinda da sessão, checagem de autoria em editar/excluir, queries parametrizadas, ausência de `innerHTML` e de dependências externas no frontend.
+- Rodou `node --check` nos arquivos JS e `validar-local.mjs` (o único item pendente na época era o deploy).
+- Orientou a criação do D1, a configuração do Cloudflare Pages e do Discord, e diagnosticou o erro `no such table: discord_users` do ambiente local (migração aplicada em outra pasta de estado).
+- Skill: `skills/revisao-codigo/SKILL.md`.
 
-### Agente 3 — Teste e validação
+### Agente 3 — Teste e validação (Copilot, modo Agent, sessão separada)
 
-- Responsável pela checagem de sintaxe e integração dos endpoints e pela validação dos critérios determinísticos locais.
-- Usa `skills/teste-validacao/SKILL.md`.
-- Validou sintaxe de 12 arquivos JavaScript, executou a migração e verificou constraints com SQLite em memória e rodou o validador local. Os critérios estruturais 1–8 passaram; deploy público ainda não foi configurado.
-- A revisão identificou uma divergência documental do método de estado, corrigida para `PATCH`, e tratamento ambíguo de sessão ausente no cliente, corrigido para preservar o status HTTP e tratar `401`/`403` como login necessário.
-- O fluxo OAuth real ainda depende de credenciais externas e não foi executado.
+- Seguiu `skills/teste-validacao/SKILL.md`, sem alterar arquivos.
+- Resultado: `node --check` passou em 12 arquivos; `validar-local.mjs` passou nos 9 critérios, incluindo a URL pública do Cloudflare Pages.
+
+## Testes manuais do estudante
+
+- Local (`wrangler pages dev`, D1 local): login Discord e fluxo completo.
+- Produção (Cloudflare Pages + D1), com duas contas Discord em sessões separadas: inscrição individual, feed só das disciplinas inscritas, segunda conta sem botões de editar/excluir no aviso alheio, "lido" e "fixado" individuais, aviso de uma conta visível para a outra.
 
 ## Contratos de dados
 
-- A identidade autenticada é obtida da sessão HttpOnly assinada, não de campos enviados pelo cliente.
-- `subscriptions` define o feed que cada estudante acompanha.
-- `post_states` guarda `is_read` e `is_pinned` por par aviso/usuário.
-- O D1 mantém autor e cópia pública do perfil na criação do aviso para rastreabilidade.
+- A identidade do autor vem da sessão assinada, nunca do corpo da requisição.
+- `subscriptions` define o feed de cada estudante; `post_states` guarda `is_read` e `is_pinned` por aviso/usuário.
+- `posts` guarda `author_id`, `author_name` e `author_avatar` na criação.

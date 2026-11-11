@@ -3,7 +3,7 @@
 - **Estudante:** Alexandre Salvario Sontag
 - **Turma:** 2B
 - **Chave Única Oficial:** `P26-2B-53BA-625A-BA24-E918`
-- **URL_CLOUDFLARE:** pendente de publicação e configuração de domínio.
+- **URL_CLOUDFLARE:** 'https://projeto-p26-2b-53ba-625a-ba24-e918.pages.dev'
 
 ## Sobre
 
