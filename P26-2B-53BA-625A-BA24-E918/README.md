@@ -3,7 +3,7 @@
 - **Estudante:** Alexandre Salvario Sontag
 - **Turma:** 2B
 - **Chave Única Oficial:** `P26-2B-53BA-625A-BA24-E918`
-- **URL_CLOUDFLARE:** 'https://projeto-p26-2b-53ba-625a-ba24-e918.pages.dev'
+- **URL_CLOUDFLARE:** https://projeto-p26-2b-53ba-625a-ba24-e918.pages.dev
 
 ## Sobre
 
@@ -38,42 +38,26 @@ Execute os comandos a seguir no PowerShell, na raiz desta pasta. É necessário 
 3. Inicialize o D1 local e aplique a migração:
 
    ```powershell
-   npx.cmd wrangler d1 migrations apply DB --local
+   npx.cmd wrangler d1 migrations apply DB --local --persist-to .wrangler/state
    ```
 
    O armazenamento local do D1 é gerenciado pelo Wrangler; isso não cria nem publica um banco remoto.
-4. Inicie Pages localmente e abra `http://localhost:8788`:
+4. Inicie Pages localmente (usando a mesma pasta de estado da migração) e abra `http://localhost:8788`:
 
    ```powershell
-   npx.cmd wrangler pages dev public --port 8788
+   npx.cmd wrangler pages dev public --port 8788 --persist-to .wrangler/state
    ```
 
 ## Deploy Cloudflare
 
-O deploy ainda não está configurado e **não existe URL pública**. O `database_id` zerado em `wrangler.jsonc` é apenas um placeholder; substitua-o antes de vincular um banco remoto.
+O projeto está publicado no Cloudflare Pages em https://projeto-p26-2b-53ba-625a-ba24-e918.pages.dev, usando esta subpasta como diretório raiz, sem comando de build e com diretório de saída `public`.
 
-1. Na raiz desta pasta, crie o banco remoto:
+- **Banco:** Cloudflare D1 `db-p26-2b-53ba-625a-ba24-e918`, vinculado ao binding `DB` (declarado em `wrangler.jsonc`). A migração `migrations/0001_init.sql` foi aplicada com `npx.cmd wrangler d1 migrations apply DB --remote`.
+- **Login:** Discord OAuth2, com o redirect de produção `https://projeto-p26-2b-53ba-625a-ba24-e918.pages.dev/api/auth/discord/callback` cadastrado no Discord Developer Portal.
+- **Segredos de produção:** `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET` e `DISCORD_REDIRECT_URI` ficam como secrets no painel do Pages e nunca no repositório.
+- **Verificação:** `node validar-local.mjs P26-2B-53BA-625A-BA24-E918` (na raiz do repositório) confirma os critérios da rubrica e a disponibilidade da URL pública.
 
-   ```powershell
-   npx.cmd wrangler d1 create db-p26-2b-53ba-625a-ba24-e918
-   ```
-
-   Copie o `database_id` retornado para `wrangler.jsonc`, mantendo o nome e o binding `DB`, e aplique a migração remota:
-
-   ```powershell
-   npx.cmd wrangler d1 migrations apply DB --remote
-   ```
-
-2. Configure o projeto Cloudflare Pages com esta subpasta como diretório raiz, sem comando de build e com diretório de saída `public`. Vincule o D1 ao binding `DB`.
-3. Crie/prepare a aplicação OAuth2 no Discord Developer Portal. Depois que o Cloudflare fornecer o domínio Pages, adicione como redirect URI `https://<dominio-pages-real>/api/auth/discord/callback`; não use o endereço local em produção.
-4. Configure como secrets/variáveis do ambiente de produção do Pages `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` e `SESSION_SECRET`. Gere um `SESSION_SECRET` forte e distinto localmente; mantenha-o com pelo menos 32 caracteres. Não coloque credenciais no código nem as compartilhe no chat.
-5. Após publicar, substitua `URL_CLOUDFLARE` no início deste README pela URL real e execute, a partir da raiz do repositório:
-
-   ```powershell
-   node validar-local.mjs P26-2B-53BA-625A-BA24-E918
-   ```
-
-Enquanto o deploy não for feito, `URL_CLOUDFLARE` permanece pendente e o validador local marcará a verificação de disponibilidade pública como pendente.
+Os agentes, o harness e os skills usados estão descritos em `AGENTS.md` e `skills/`.
 
 ## API
 
