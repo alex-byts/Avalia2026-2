@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f5f7fb">
+  <meta name="theme-color" content="#f5f7fb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#11141d" media="(prefers-color-scheme: dark)">
   <title>Mural de Avisos — por disciplina</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
@@ -73,6 +74,7 @@
           <span aria-hidden="true">✦</span>
           <p><strong>Fique por dentro</strong><br>Fixe os avisos importantes para encontrá-los mais rápido.</p>
         </section>
+        <div class="global-message" id="globalMessage" role="status" aria-live="polite"></div>
       </aside>
 
       <section class="feed-column" aria-labelledby="feedTitle">
@@ -126,12 +128,33 @@
           </div>
         </form>
 
+        <div class="feed-filters" id="feedFilters" role="search" aria-label="Buscar e filtrar avisos">
+          <label class="search-label" for="searchInput">
+            <span class="sr-only">Buscar avisos</span>
+            <input id="searchInput" type="search" maxlength="100" autocomplete="off" placeholder="Buscar por título, texto ou autor">
+          </label>
+          <div class="chip-group" role="group" aria-label="Mostrar avisos">
+            <button class="chip active" type="button" data-status="all" aria-pressed="true">Todos</button>
+            <button class="chip" type="button" data-status="unread" aria-pressed="false">Não lidos <span class="chip-count" id="unreadCount">0</span></button>
+            <button class="chip" type="button" data-status="pinned" aria-pressed="false">Fixados</button>
+          </div>
+          <label class="type-label" for="typeFilter">
+            <span class="sr-only">Tipo de aviso</span>
+            <select id="typeFilter">
+              <option value="">Todos os tipos</option>
+              <option value="aviso">Avisos</option>
+              <option value="lembrete">Lembretes</option>
+              <option value="link">Links úteis</option>
+            </select>
+          </label>
+          <p class="feed-summary" id="feedSummary" role="status" aria-live="polite"></p>
+        </div>
+
         <div class="feed-list" id="feedList" aria-live="polite" aria-busy="true">
           <div class="empty-state"><span class="loader" aria-hidden="true"></span><p>Carregando avisos…</p></div>
         </div>
       </section>
     </div>
-    <div class="global-message" id="globalMessage" role="status" aria-live="polite"></div>
   </main>
 
   <footer>

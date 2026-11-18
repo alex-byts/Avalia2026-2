@@ -7,6 +7,7 @@
     subscriptions: new Set(),
     posts: [],
     editingId: null,
+    filters: { query: "", status: "all", type: "" },
   };
   const byId = (id) => document.getElementById(id);
   const elements = {
@@ -36,6 +37,11 @@
     formHeading: byId("formHeading"),
     feedList: byId("feedList"),
     globalMessage: byId("globalMessage"),
+    searchInput: byId("searchInput"),
+    typeFilter: byId("typeFilter"),
+    feedSummary: byId("feedSummary"),
+    unreadCount: byId("unreadCount"),
+    statusChips: Array.from(document.querySelectorAll(".chip[data-status]")),
   };
 
   const field = (object, ...keys) => {
@@ -82,9 +88,27 @@
     return payload;
   }
 
+  let globalMessageTimer = null;
+  // Com o mural visível, a mensagem fica na coluna lateral; sem ele (ex.: falha ao verificar a sessão), flutua na tela.
+  function placeGlobalMessage() {
+    const inSidebar = !elements.appLayout.hidden;
+    const target = inSidebar ? document.querySelector(".sidebar") : document.getElementById("conteudo");
+    if (target && elements.globalMessage.parentElement !== target) target.appendChild(elements.globalMessage);
+    elements.globalMessage.classList.toggle("floating", !inSidebar);
+  }
   function showMessage(element, message, isError = false) {
+    if (element === elements.globalMessage) placeGlobalMessage();
     element.textContent = message;
     element.classList.toggle("message-error", isError);
+    if (element === elements.globalMessage) {
+      clearTimeout(globalMessageTimer);
+      if (message) {
+        globalMessageTimer = setTimeout(() => {
+          element.textContent = "";
+          element.classList.remove("message-error");
+        }, isError ? 8000 : 4000);
+      }
+    }
   }
 
   function normalizeUser(payload) {
@@ -278,24 +302,69 @@
       return;
     }
     const filter = elements.courseFilter.value;
-    const posts = state.posts.filter((post) => {
+    const inCourse = state.posts.filter((post) => {
       const code = postCourseCode(post);
       return state.subscriptions.has(code) && (!filter || code === filter);
+    });
+    const unread = inCourse.filter((post) => !isTruthy(field(post, "isRead", "is_read", "read"))).length;
+    elements.unreadCount.textContent = String(unread);
+
+    const { query, status, type } = state.filters;
+    const needle = query.trim().toLocaleLowerCase("pt-BR");
+    const filtersActive = Boolean(needle) || status !== "all" || Boolean(type);
+    const posts = inCourse.filter((post) => {
+      if (status === "unread" && isTruthy(field(post, "isRead", "is_read", "read"))) return false;
+      if (status === "pinned" && !isTruthy(field(post, "isPinned", "is_pinned", "pinned"))) return false;
+      if (type && normalizeType(post) !== type) return false;
+      if (needle) {
+        const haystack = [visibleTitle(post), field(post, "body"), field(post, "authorName", "author_name", "username"), postCourseCode(post)]
+          .join(" ").toLocaleLowerCase("pt-BR");
+        if (!haystack.includes(needle)) return false;
+      }
+      return true;
     }).sort((a, b) => {
       const aPinned = isTruthy(field(a, "isPinned", "is_pinned"));
       const bPinned = isTruthy(field(b, "isPinned", "is_pinned"));
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
       return new Date(field(b, "createdAt", "created_at") || 0) - new Date(field(a, "createdAt", "created_at") || 0);
     });
+
+    elements.feedSummary.textContent = inCourse.length
+      ? `${posts.length} de ${inCourse.length} ${inCourse.length === 1 ? "aviso" : "avisos"} · ${unread} não ${unread === 1 ? "lido" : "lidos"}`
+      : "";
+
     if (!posts.length) {
       const empty = text("div", "empty-state", "");
-      empty.append(text("span", "empty-icon", "✳"), text("p", "", filter
-        ? "Ainda não há avisos nesta disciplina."
-        : "Ainda não há avisos nas suas disciplinas. Que tal publicar o primeiro?"));
+      if (filtersActive && inCourse.length) {
+        const clear = text("button", "button button-quiet", "Limpar filtros");
+        clear.type = "button";
+        clear.dataset.clearFilters = "true";
+        empty.append(text("span", "empty-icon", "⌕"), text("p", "", "Nenhum aviso corresponde à busca ou aos filtros."), clear);
+      } else {
+        empty.append(text("span", "empty-icon", "✳"), text("p", "", filter
+          ? "Ainda não há avisos nesta disciplina."
+          : "Ainda não há avisos nas suas disciplinas. Que tal publicar o primeiro?"));
+      }
       elements.feedList.appendChild(empty);
       return;
     }
     posts.forEach((post) => elements.feedList.appendChild(renderPost(post)));
+  }
+
+  function syncFilterControls() {
+    elements.searchInput.value = state.filters.query;
+    elements.typeFilter.value = state.filters.type;
+    elements.statusChips.forEach((chip) => {
+      const active = chip.dataset.status === state.filters.status;
+      chip.classList.toggle("active", active);
+      chip.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function clearFilters() {
+    state.filters = { query: "", status: "all", type: "" };
+    syncFilterControls();
+    renderFeed();
   }
 
   async function loadPosts() {
@@ -548,6 +617,27 @@
   elements.courseFilter.addEventListener("change", () => renderFeed());
   elements.postForm.addEventListener("submit", submitPost);
   elements.cancelEdit.addEventListener("click", resetPostForm);
-  elements.feedList.addEventListener("click", handleFeedAction);
+  elements.feedList.addEventListener("click", (event) => {
+    if (event.target.closest("button[data-clear-filters]")) {
+      clearFilters();
+      return;
+    }
+    handleFeedAction(event);
+  });
+  elements.searchInput.addEventListener("input", () => {
+    state.filters.query = elements.searchInput.value;
+    renderFeed();
+  });
+  elements.typeFilter.addEventListener("change", () => {
+    state.filters.type = elements.typeFilter.value;
+    renderFeed();
+  });
+  elements.statusChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      state.filters.status = chip.dataset.status;
+      syncFilterControls();
+      renderFeed();
+    });
+  });
   initialize();
 })();
