@@ -70,6 +70,16 @@
           <p class="inline-message" id="subscriptionMessage" role="status" aria-live="polite"></p>
         </section>
 
+        <section class="panel deadlines-panel" id="deadlinesPanel" aria-labelledby="deadlinesTitle" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">NÃO PERCA</p>
+              <h2 id="deadlinesTitle">Próximos prazos</h2>
+            </div>
+          </div>
+          <ul class="deadline-list" id="deadlineList"></ul>
+        </section>
+
         <section class="tip-card">
           <span aria-hidden="true">✦</span>
           <p><strong>Fique por dentro</strong><br>Fixe os avisos importantes para encontrá-los mais rápido.</p>
@@ -118,6 +128,9 @@
           </label>
           <label for="postLink">Link <span class="optional">(opcional)</span>
             <input id="postLink" name="link" type="url" maxlength="2048" placeholder="https://…">
+          </label>
+          <label for="postDue" id="dueField" hidden>Prazo de entrega <span class="optional">(opcional)</span>
+            <input id="postDue" name="due" type="date" min="2020-01-01" max="2100-12-31">
           </label>
           <div class="compose-actions">
             <p class="inline-message" id="postMessage" role="status" aria-live="polite"></p>

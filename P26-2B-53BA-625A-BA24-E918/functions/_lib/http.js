@@ -84,6 +84,17 @@ export function optionalLink(value) {
   return value;
 }
 
+export function optionalDueDate(value) {
+  if (value === null || value === "") return null;
+  const invalid = () => new HttpError(400, "invalid_payload", "due_at deve ser uma data AAAA-MM-DD válida ou null.");
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw invalid();
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) throw invalid();
+  if (year < 2020 || year > 2100) throw invalid();
+  return value;
+}
+
 export function parsePostId(value) {
   if (!/^[1-9]\d*$/.test(String(value))) {
     throw new HttpError(400, "invalid_post_id", "O id da publicação é inválido.");

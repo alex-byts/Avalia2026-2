@@ -42,6 +42,10 @@
     feedSummary: byId("feedSummary"),
     unreadCount: byId("unreadCount"),
     statusChips: Array.from(document.querySelectorAll(".chip[data-status]")),
+    postDue: byId("postDue"),
+    dueField: byId("dueField"),
+    deadlinesPanel: byId("deadlinesPanel"),
+    deadlineList: byId("deadlineList"),
   };
 
   const field = (object, ...keys) => {
@@ -228,6 +232,103 @@
     return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(date);
   }
 
+  // ---- Prazos (due_at no formato AAAA-MM-DD, interpretado no fuso local) ----
+  function parseDue(post) {
+    const match = String(field(post, "dueAt", "due_at") || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function dueInfo(post) {
+    const due = parseDue(post);
+    if (!due) return null;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const days = Math.round((due - today) / 86400000);
+    let label;
+    let tone;
+    if (days < 0) { label = `Venceu há ${-days} ${-days === 1 ? "dia" : "dias"}`; tone = "due-overdue"; }
+    else if (days === 0) { label = "Vence hoje"; tone = "due-today"; }
+    else if (days === 1) { label = "Vence amanhã"; tone = "due-soon"; }
+    else { label = `Faltam ${days} dias`; tone = days <= 3 ? "due-soon" : "due-later"; }
+    const formatted = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(due);
+    return { due, days, label, tone, formatted, iso: String(field(post, "dueAt", "due_at")) };
+  }
+
+  function icsEscape(value) {
+    return String(value).replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+  }
+
+  function icsFold(line) {
+    const parts = [];
+    for (let i = 0; i < line.length; i += 70) parts.push(line.slice(i, i + 70));
+    return parts.join("\r\n ");
+  }
+
+  function downloadIcs(post) {
+    const info = dueInfo(post);
+    if (!info) return;
+    const ymd = (date) => `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+    const next = new Date(info.due.getFullYear(), info.due.getMonth(), info.due.getDate() + 1);
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const code = postCourseCode(post);
+    const lines = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Mural de Avisos//P26-2B-53BA-625A-BA24-E918//PT",
+      "CALSCALE:GREGORIAN",
+      "BEGIN:VEVENT",
+      `UID:post-${postId(post)}@mural-p26-2b-53ba-625a-ba24-e918`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${ymd(info.due)}`,
+      `DTEND;VALUE=DATE:${ymd(next)}`,
+      `SUMMARY:${icsEscape(`${code}: ${visibleTitle(post)}`)}`,
+      `DESCRIPTION:${icsEscape(field(post, "body"))}`,
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].map(icsFold);
+    const blob = new Blob([lines.join("\r\n") + "\r\n"], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `prazo-${code}-${postId(post)}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showMessage(elements.globalMessage, "Arquivo de calendário baixado.");
+  }
+
+  function renderDeadlines() {
+    const upcoming = state.posts
+      .filter((post) => state.subscriptions.has(postCourseCode(post)))
+      .map((post) => ({ post, info: dueInfo(post) }))
+      .filter((item) => item.info && item.info.days >= 0)
+      .sort((a, b) => a.info.due - b.info.due || postCourseCode(a.post).localeCompare(postCourseCode(b.post)))
+      .slice(0, 5);
+    elements.deadlineList.replaceChildren();
+    elements.deadlinesPanel.hidden = upcoming.length === 0;
+    upcoming.forEach(({ post, info }) => {
+      const item = text("li", "", "");
+      const button = text("button", `deadline-item ${info.tone}`, "");
+      button.type = "button";
+      button.dataset.gotoPost = postId(post);
+      button.append(
+        text("strong", "", `${postCourseCode(post)} · ${visibleTitle(post) || "Sem título"}`),
+        text("span", "", `${info.label} · ${info.formatted}`),
+      );
+      item.appendChild(button);
+      elements.deadlineList.appendChild(item);
+    });
+  }
+
+  function syncDueField() {
+    const isReminder = elements.postType.value === "lembrete";
+    elements.dueField.hidden = !isReminder;
+    if (!isReminder) elements.postDue.value = "";
+  }
+
   function addAction(buttons, label, action, active, accessibleLabel) {
     const button = text("button", `action-button${active ? " active" : ""}`, label);
     button.type = "button";
@@ -258,7 +359,16 @@
 
     const heading = text("h3", "", visibleTitle(post) || "Sem título");
     const content = text("p", "post-body", field(post, "body"));
-    card.append(meta, heading, content);
+    const due = dueInfo(post);
+    if (due) {
+      const badge = text("p", `post-due ${due.tone}`, "");
+      const when = text("time", "", `${due.label} · ${due.formatted}`);
+      when.dateTime = due.iso;
+      badge.append(text("span", "", "⏰"), when);
+      card.append(meta, heading, badge, content);
+    } else {
+      card.append(meta, heading, content);
+    }
 
     const linkValue = String(field(post, "link", "url") || "").trim();
     if (linkValue && isSafeHttpUrl(linkValue)) {
@@ -277,6 +387,10 @@
     const ownPost = String(field(post, "authorId", "author_id", "userId", "user_id")) === state.user.id;
     addAction(actions, pinned ? "★ Fixado" : "☆ Fixar", pinned ? "unpin" : "pin", pinned, pinned ? "Desafixar aviso" : "Fixar aviso");
     addAction(actions, read ? "✓ Lido" : "Marcar lido", read ? "unread" : "read", read, read ? "Marcar como não lido" : "Marcar como lido");
+    if (due) {
+      const calendar = addAction(actions, "📅 Calendário", "ics", false, "Adicionar o prazo ao calendário");
+      calendar.removeAttribute("aria-pressed");
+    }
     if (ownPost) {
       addAction(actions, "Editar", "edit", false, "Editar aviso");
       addAction(actions, "Excluir", "delete", false, "Excluir aviso");
@@ -287,6 +401,7 @@
   }
 
   function renderFeed(message) {
+    renderDeadlines();
     elements.feedList.replaceChildren();
     elements.feedList.setAttribute("aria-busy", "false");
     if (message) {
@@ -408,6 +523,7 @@
     elements.formHeading.textContent = "Compartilhe com sua turma";
     elements.submitPost.textContent = "Publicar aviso";
     elements.cancelEdit.hidden = true;
+    syncDueField();
     showMessage(elements.postMessage, "");
     const subscribed = state.courses.find((course) => state.subscriptions.has(courseCode(course)));
     elements.postCourse.value = subscribed ? courseCode(subscribed) : "";
@@ -420,6 +536,8 @@
     elements.postTitle.value = visibleTitle(post);
     elements.postBody.value = String(field(post, "body"));
     elements.postLink.value = String(field(post, "link", "url") || "");
+    syncDueField();
+    elements.postDue.value = elements.dueField.hidden ? "" : String(field(post, "dueAt", "due_at") || "");
     elements.formHeading.textContent = "Editar aviso";
     elements.submitPost.textContent = "Salvar alterações";
     elements.cancelEdit.hidden = false;
@@ -494,15 +612,17 @@
     elements.submitPost.disabled = true;
     elements.submitPost.textContent = state.editingId ? "Salvando…" : "Publicando…";
     showMessage(elements.postMessage, "");
+    const dueValue = elements.postType.value === "lembrete" ? elements.postDue.value : "";
     const payload = {
       course_code: code,
       title: encodeTitle(title, elements.postType.value),
       body,
       link: link || null,
+      due_at: dueValue || null,
     };
     try {
       if (state.editingId) {
-        const editableFields = { title: payload.title, body: payload.body, link: payload.link };
+        const editableFields = { title: payload.title, body: payload.body, link: payload.link, due_at: payload.due_at };
         await api(`/api/posts/${encodeURIComponent(state.editingId)}`, { method: "PATCH", body: JSON.stringify(editableFields) });
       } else {
         await api("/api/posts", { method: "POST", body: JSON.stringify(payload) });
@@ -570,6 +690,8 @@
     } else if (action === "delete") {
       const authorId = String(field(post, "authorId", "author_id", "userId", "user_id"));
       if (authorId === state.user.id) await deletePost(post, button);
+    } else if (action === "ics") {
+      downloadIcs(post);
     } else {
       await changePostState(post, action, button);
     }
@@ -627,6 +749,21 @@
   elements.searchInput.addEventListener("input", () => {
     state.filters.query = elements.searchInput.value;
     renderFeed();
+  });
+  elements.postType.addEventListener("change", syncDueField);
+  elements.deadlineList.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-goto-post]");
+    if (!button) return;
+    elements.courseFilter.value = "";
+    state.filters = { query: "", status: "all", type: "" };
+    syncFilterControls();
+    renderFeed();
+    const card = Array.from(elements.feedList.querySelectorAll("[data-post-id]")).find((node) => node.dataset.postId === button.dataset.gotoPost);
+    if (card) {
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      card.classList.add("flash");
+      setTimeout(() => card.classList.remove("flash"), 1800);
+    }
   });
   elements.typeFilter.addEventListener("change", () => {
     state.filters.type = elements.typeFilter.value;

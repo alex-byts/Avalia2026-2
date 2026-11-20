@@ -3,6 +3,7 @@ import {
   errorResponse,
   json,
   methodNotAllowed,
+  optionalDueDate,
   optionalLink,
   parsePostId,
   readJson,
@@ -11,7 +12,7 @@ import {
 } from "../../_lib/http.js";
 
 const POST_FIELDS = `p.id, p.course_code, p.author_id, p.author_name, p.author_avatar,
-  p.title, p.body, p.link, p.created_at, p.updated_at`;
+  p.title, p.body, p.link, p.due_at, p.created_at, p.updated_at`;
 
 async function findPost(db, id) {
   return db.prepare(`SELECT ${POST_FIELDS} FROM posts p WHERE p.id = ?`).bind(id).first();
@@ -41,7 +42,7 @@ export async function onRequestPatch({ request, env, params }) {
   try {
     const user = await getSession(request, env);
     const payload = await readJson(request);
-    requireKeys(payload, ["title", "body", "link"]);
+    requireKeys(payload, ["title", "body", "link", "due_at"]);
     const id = parsePostId(params.id);
     const db = requireDB(env);
     const current = await findPost(db, id);
@@ -63,8 +64,12 @@ export async function onRequestPatch({ request, env, params }) {
       updates.push("link = ?");
       values.push(optionalLink(payload.link));
     }
+    if (Object.hasOwn(payload, "due_at")) {
+      updates.push("due_at = ?");
+      values.push(optionalDueDate(payload.due_at));
+    }
     if (!updates.length) {
-      return json({ error: "invalid_payload", message: "Informe ao menos title, body ou link." }, 400);
+      return json({ error: "invalid_payload", message: "Informe ao menos title, body, link ou due_at." }, 400);
     }
     updates.push("updated_at = CURRENT_TIMESTAMP");
     values.push(id, user.user_id);

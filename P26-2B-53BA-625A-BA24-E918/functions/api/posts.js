@@ -3,6 +3,7 @@ import {
   errorResponse,
   json,
   methodNotAllowed,
+  optionalDueDate,
   optionalLink,
   readJson,
   requireKeys,
@@ -11,7 +12,7 @@ import {
 } from "../_lib/http.js";
 
 const POST_FIELDS = `p.id, p.course_code, p.author_id, p.author_name, p.author_avatar,
-  p.title, p.body, p.link, p.created_at, p.updated_at`;
+  p.title, p.body, p.link, p.due_at, p.created_at, p.updated_at`;
 
 export async function onRequestGet({ request, env }) {
   try {
@@ -41,11 +42,12 @@ export async function onRequestPost({ request, env }) {
   try {
     const user = await getSession(request, env);
     const payload = await readJson(request);
-    requireKeys(payload, ["course_code", "title", "body", "link"]);
+    requireKeys(payload, ["course_code", "title", "body", "link", "due_at"]);
     const courseCode = requiredCourseCode(payload.course_code);
     const title = requiredText(payload.title, "title", 200);
     const body = requiredText(payload.body, "body", 20000);
     const link = payload.link === undefined ? null : optionalLink(payload.link);
+    const dueAt = payload.due_at === undefined ? null : optionalDueDate(payload.due_at);
     const db = requireDB(env);
     const subscribed = await db.prepare(
       "SELECT 1 AS subscribed FROM subscriptions WHERE user_id = ? AND course_code = ?",
@@ -55,7 +57,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     const inserted = await db.prepare(
-      "INSERT INTO posts (course_code, author_id, author_name, author_avatar, title, body, link, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+      "INSERT INTO posts (course_code, author_id, author_name, author_avatar, title, body, link, due_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
     ).bind(
       courseCode,
       user.user_id,
@@ -64,6 +66,7 @@ export async function onRequestPost({ request, env }) {
       title,
       body,
       link,
+      dueAt,
     ).run();
     const id = Number(inserted.meta?.last_row_id);
     const post = await db.prepare(
